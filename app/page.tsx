@@ -84,6 +84,15 @@ export default function HUD() {
 
     return { days, burnRate };
   }, [currentBalance, cashInPocket, totalRecurring]);
+
+  const [survivalDate, setSurvivalDate] = useState<Date>(() => new Date());
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setSurvivalDate(new Date(Date.now() + survivalStats.days * 86400000));
+    }, 0);
+    return () => clearTimeout(t);
+  }, [survivalStats.days]);
   const [shiftDays, setShiftDays] = useState(0);
 
   // Update a single transaction's date (ISO string expected)
@@ -110,20 +119,22 @@ export default function HUD() {
 
   return (
     <main className="p-6 bg-neutral-50 min-h-screen text-black font-mono">
-      {/* 1. SAFETY */}
-      <section className="mb-8">
-        <h2 className="text-[10px] font-black uppercase mb-4 opacity-50">Status</h2>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="border-4 border-black p-6 bg-white shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
-            <p className="text-[10px] font-bold">SAFE TO SPEND</p>
-            <p className="text-3xl font-black">{safeToSpend.toLocaleString()} ETB</p>
-          </div>
-          <div className="border-4 border-black p-6 bg-black text-white shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
-            <p className="text-[10px] font-bold text-neutral-400">SURVIVAL</p>
-            <p className="text-3xl font-black">{survivalStats.days} DAYS</p>
-          </div>
+      {/* Hero HUD: Safe to Spend + Survival */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+        {/* SAFE TO SPEND - Loud & Confident */}
+        <div className="border-4 border-black p-8 bg-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] rounded-2xl">
+          <h1 className="text-[10px] font-black uppercase tracking-widest opacity-60">Safe to spend</h1>
+          <p className="text-6xl font-black mt-2">{safeToSpend.toLocaleString()} ETB</p>
         </div>
-      </section>
+
+        {/* SURVIVAL - Financial Life Support */}
+        <div className="border-4 border-black p-8 bg-black text-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] rounded-2xl">
+          <h1 className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Survival</h1>
+          <p className="text-5xl font-black mt-2">{survivalStats.days} Days Left</p>
+          <p className="text-sm font-bold mt-2">SURVIVE UNTIL {survivalDate.toLocaleDateString().toUpperCase()}</p>
+          <p className="text-[10px] uppercase mt-4 tracking-widest opacity-50">stable for now</p>
+        </div>
+      </div>
 
       {/* 2. DAMAGE */}
       <section className="mb-8 p-6 border-2 border-black bg-white">
