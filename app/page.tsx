@@ -1,33 +1,63 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { db } from '../lib/firebase';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { Trash2, Plus, X, Trash, Pencil, Check } from 'lucide-react';
 import { LineChart, Line, ResponsiveContainer } from 'recharts';
 
 export default function HUD() {
+  const [mounted, setMounted] = useState(false);
   const [transactions, setTransactions] = useState([{ id: 1, text: 'Freelance', amount: 5000, type: 'income' }]);
   const [savings, setSavings] = useState(0);
-  const [goalName, setGoalName] = useState("MACBOOK");
-  const [goalAmount, setGoalAmount] = useState(50000);
-  const [goalVisual, setGoalVisual] = useState("💻");
-  const [isEditingGoal, setIsEditingGoal] = useState(false);
-  const [tempGoalVisual, setTempGoalVisual] = useState(goalVisual);
-  
   const [recurring, setRecurring] = useState([
     { id: 1, text: 'RENT', amount: 14000 },
     { id: 2, text: 'WIFI', amount: 1500 },
     { id: 3, text: 'FOOD', amount: 5000 },
     { id: 4, text: 'LAUNDARY', amount: 2000 }
   ]);
+
+  const [goalName, setGoalName] = useState("MACBOOK");
+  const [goalAmount, setGoalAmount] = useState(50000);
+  const [goalVisual, setGoalVisual] = useState("💻");
+  const [isEditingGoal, setIsEditingGoal] = useState(false);
+  const [tempGoalVisual, setTempGoalVisual] = useState(goalVisual);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formData, setFormData] = useState({ text: '', amount: '', type: 'income' as 'income' | 'expense' | 'savings' });
   const [newRec, setNewRec] = useState({ text: '', amount: '' });
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editData, setEditData] = useState({ text: '', amount: '' });
 
+  // Load from Firestore
+  useEffect(() => {
+    async function fetchData() {
+      const docRef = doc(db, "users", "my_user_id");
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setTransactions(data.transactions);
+        setSavings(data.savings);
+        setRecurring(data.recurring);
+      }
+      setMounted(true);
+    }
+    fetchData();
+  }, []);
+
+  // Save to Firestore
+  useEffect(() => {
+    if (mounted) {
+      const saveData = async () => {
+        await setDoc(doc(db, "users", "my_user_id"), { transactions, savings, recurring });
+      };
+      saveData();
+    }
+  }, [transactions, savings, recurring, mounted]);
+
+  if (!mounted) return null;
+
   const totalRecurring = recurring.reduce((acc, r) => acc + r.amount, 0);
   const totalIncome = transactions.filter(t => t.type === 'income').reduce((acc, t) => acc + t.amount, 0);
   const totalExpenses = transactions.filter(t => t.type === 'expense').reduce((acc, t) => acc + t.amount, 0);
-  
   const balance = (totalIncome - totalExpenses - savings);
   const safeToSpend = balance - totalRecurring;
   const savingsPercent = Math.min(Math.round((savings / goalAmount) * 100), 100);
@@ -49,7 +79,7 @@ export default function HUD() {
 
   return (
     <main className="min-h-screen bg-[#F4F4F4] p-8 font-mono text-black">
-      <header className="grid grid-cols-2 gap-8 mb-8">
+      <header className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
         <div className="border-4 border-black p-8 bg-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] rounded-2xl">
           <h1 className="text-sm font-bold">RUNWAY BALANCE</h1>
           <p className="text-6xl font-black mt-2">{balance.toLocaleString()} ETB</p>
@@ -75,7 +105,7 @@ export default function HUD() {
                     <input type="number" className="p-2 border-2 border-black text-xs" placeholder="Goal Amount" value={goalAmount} onChange={(e) => setGoalAmount(Number(e.target.value))} />
                 </div>
             ) : (
-                <div className="my-6 p-4 bg-white border-4 border-black rounded-full shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                <div className="my-6 p-4 bg-white border-4 border-black rounded-full shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex items-center justify-center">
                     {goalVisual.includes('http') ? <img src={goalVisual} alt="goal" className="w-24 h-24 object-contain" /> : <span className="text-6xl">{goalVisual}</span>}
                 </div>
             )}
