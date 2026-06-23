@@ -5,11 +5,11 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { Trash2, X, Trash, Pencil, Check } from 'lucide-react';
 import { LineChart, Line, ResponsiveContainer, CartesianGrid, XAxis, YAxis } from 'recharts';
 
-type Transaction = { id: number; text: string; amount: number; type: 'income' | 'expense' | 'savings'; date: string };
+type Transaction = { id: number; text: string; amount: number; type: 'income' | 'expense' | 'savings'; date: string; upfrontPaid?: boolean };
 
 export default function HUD() {
   const [mounted, setMounted] = useState(false);
-  const [transactions, setTransactions] = useState<Transaction[]>([{ id: 1, text: 'Freelance', amount: 5000, type: 'income', date: new Date().toISOString() }]);
+  const [transactions, setTransactions] = useState<Transaction[]>([{ id: 1, text: 'Freelance', amount: 5000, type: 'income', date: new Date().toISOString(), upfrontPaid: false }]);
   const [savings, setSavings] = useState(0);
   const [recurring, setRecurring] = useState([
     { id: 1, text: 'RENT', amount: 14000 },
@@ -26,8 +26,6 @@ export default function HUD() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formData, setFormData] = useState({ text: '', amount: '', type: 'income' as 'income' | 'expense' | 'savings' });
   const [newRec, setNewRec] = useState({ text: '', amount: '' });
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [editData, setEditData] = useState({ text: '', amount: '', date: new Date().toISOString() });
 
   // Load from Firestore
   useEffect(() => {
@@ -84,6 +82,30 @@ export default function HUD() {
     setTransactions(prev => prev.map(t => t.id === id ? { ...t, date } : t));
   };
 
+  const toggleUpfrontPaid = (id: number) => {
+    setTransactions(prev => prev.map(t => t.id === id ? { ...t, upfrontPaid: !t.upfrontPaid } : t));
+  };
+
+  const calendarDays = useMemo(() => {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    return Array.from({ length: 28 }, (_, i) => {
+      const day = new Date(start);
+      day.setDate(start.getDate() + i);
+      return day;
+    });
+  }, []);
+
+  const calendarMap = useMemo(() => {
+    const map = new Map<string, Transaction[]>();
+    incomeTransactions.forEach((income) => {
+      const key = new Date(income.date).toISOString().slice(0, 10);
+      const existing = map.get(key) || [];
+      map.set(key, [...existing, income]);
+    });
+    return map;
+  }, [incomeTransactions]);
+
   const savingsPercent = useMemo(() => Math.min(Math.round((goalAmount === 0 ? 0 : (savings / goalAmount) * 100)), 100), [savings, goalAmount]);
 
   const chartData = useMemo(() => transactions.slice(-5).map((t, i) => ({
@@ -100,7 +122,7 @@ export default function HUD() {
     if (formData.type === 'savings') {
       setSavings(prev => prev + amount);
     } else {
-      setTransactions([...transactions, { id: Date.now(), text: formData.text || 'Entry', amount, type: formData.type, date: new Date().toISOString() }]);
+      setTransactions([...transactions, { id: Date.now(), text: formData.text || 'Entry', amount, type: formData.type, date: new Date().toISOString(), upfrontPaid: formData.type === 'income' ? false : undefined }]);
     }
     setIsModalOpen(false);
     setFormData({ text: '', amount: '', type: 'income' });
@@ -190,56 +212,60 @@ export default function HUD() {
       <section className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
         <div className="border-4 border-black p-8 bg-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] rounded-2xl">
           <h2 className="text-xs font-black uppercase tracking-widest mb-4">When you get paid</h2>
+          <div className="grid grid-cols-7 gap-2 mb-4 text-[10px] uppercase font-black text-center">
+            {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(day => (
+              <div key={day} className="text-neutral-500">{day}</div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 gap-2 mb-6">
+            {calendarDays.map((day) => {
+              const iso = day.toISOString().slice(0, 10);
+              const items = calendarMap.get(iso) || [];
+              return (
+                <div key={iso} className="min-h-[80px] border-2 border-black p-2 rounded-2xl bg-neutral-100">
+                  <div className="font-black text-[10px] mb-1">{day.getDate()}</div>
+                  <div className="space-y-1">
+                    {items.map(item => (
+                      <div key={item.id} className={`text-[10px] p-1 rounded-lg ${item.upfrontPaid ? 'bg-green-900 text-white' : 'bg-white text-black border border-black'}`}>
+                        <div className="font-black truncate">{item.text}</div>
+                        <div className="uppercase">{item.upfrontPaid ? 'Received' : 'Due'}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
           <div className="space-y-4">
             {incomeTransactions.map((income) => (
               <div key={income.id} className="border-2 border-black p-4 rounded-2xl flex flex-col gap-3">
-                <div className="flex justify-between items-start gap-4">
+                <div className="flex justify-between items-center gap-4">
                   <div>
                     <p className="font-black text-sm uppercase">{income.text}</p>
-                    {editingId === income.id ? (
+                    <div className="mt-2 flex items-center gap-2">
                       <input
                         type="date"
-                        className="mt-2 border-2 border-black p-2 text-xs"
-                        value={editData.date.slice(0, 10)}
-                        onChange={(e) => setEditData({ ...editData, date: new Date(e.target.value).toISOString() })}
+                        className="border-2 border-black p-2 text-xs"
+                        value={income.date.slice(0, 10)}
+                        onChange={(e) => updateTransactionDate(income.id, new Date(e.target.value).toISOString())}
                       />
-                    ) : (
-                      <p className="text-xs opacity-70 mt-2">{new Date(income.date).toLocaleDateString()}</p>
-                    )}
+                      <span className={`px-2 py-1 text-[10px] font-black rounded-full ${income.upfrontPaid ? 'bg-green-900 text-white' : 'bg-yellow-200 text-black border border-black'}`}>
+                        {income.upfrontPaid ? 'Received' : 'Upcoming'}
+                      </span>
+                    </div>
                   </div>
                   <div className="text-right">
                     <p className="font-black">+{income.amount.toLocaleString()} ETB</p>
                   </div>
                 </div>
-                {editingId === income.id ? (
-                  <div className="flex gap-2 flex-wrap">
-                    <button
-                      onClick={() => {
-                        updateTransactionDate(income.id, editData.date);
-                        setEditingId(null);
-                      }}
-                      className="bg-black text-white px-4 py-2 border-4 border-black font-black rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
-                    >
-                      Save date
-                    </button>
-                    <button
-                      onClick={() => setEditingId(null)}
-                      className="bg-white text-black px-4 py-2 border-4 border-black font-black rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                ) : (
+                <div className="flex flex-wrap gap-2 items-center">
                   <button
-                    onClick={() => {
-                      setEditingId(income.id);
-                      setEditData({ text: income.text, amount: income.amount.toString(), date: income.date });
-                    }}
-                    className="self-start bg-black text-white px-4 py-2 border-4 border-black font-black rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
+                    onClick={() => toggleUpfrontPaid(income.id)}
+                    className={`px-4 py-2 border-4 border-black font-black rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] ${income.upfrontPaid ? 'bg-green-900 text-white' : 'bg-white text-black'}`}
                   >
-                    Edit pay date
+                    {income.upfrontPaid ? 'Already received' : 'Mark received'}
                   </button>
-                )}
+                </div>
               </div>
             ))}
           </div>
@@ -255,7 +281,6 @@ export default function HUD() {
                 </div>
                 <div className="flex gap-3 items-center">
                   <span className="font-black">{t.type === 'income' ? '+' : '-'}{t.amount}</span>
-                  <button onClick={() => {setEditingId(t.id); setEditData({text: t.text, amount: t.amount.toString(), date: t.date })}}><Pencil size={16}/></button>
                   <button onClick={() => setTransactions(transactions.filter(x => x.id !== t.id))}><Trash2 size={16}/></button>
                 </div>
               </div>
