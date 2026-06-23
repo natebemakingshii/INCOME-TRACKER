@@ -4,9 +4,11 @@ import { db } from './lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 // Note: icons and charting removed for simplified HUD
 
+type Transaction = { id: number; text: string; amount: number; type: 'income' | 'expense' | 'savings'; date: string };
+
 export default function HUD() {
   const [mounted, setMounted] = useState(false);
-  const [transactions, setTransactions] = useState([{ id: 1, text: 'Freelance', amount: 5000, type: 'income' }]);
+  const [transactions, setTransactions] = useState<Transaction[]>([{ id: 1, text: 'Freelance', amount: 5000, type: 'income', date: new Date().toISOString() }]);
   const [savings, setSavings] = useState(0);
   const [recurring, setRecurring] = useState([
     { id: 1, text: 'RENT', amount: 14000 },
@@ -25,7 +27,12 @@ export default function HUD() {
       const docSnap = await getDoc(docRef);
       if (docSnap.exists()) {
         const data = docSnap.data();
-        setTransactions(data.transactions);
+        // normalize transaction dates to ISO strings
+        const tx = (data.transactions || []).map((t: unknown) => {
+          const tt = t as Partial<Transaction>;
+          return { ...(tt as Transaction), date: tt?.date ? new Date(tt.date as string).toISOString() : new Date().toISOString() } as Transaction;
+        });
+        setTransactions(tx.length ? tx as Transaction[] : []);
         setSavings(data.savings);
         setRecurring(data.recurring);
       }
@@ -76,6 +83,21 @@ export default function HUD() {
 
     return { days, burnRate };
   }, [currentBalance, cashInPocket, totalRecurring]);
+  const [shiftDays, setShiftDays] = useState(0);
+
+  // Update a single transaction's date (ISO string expected)
+  const updateTransactionDate = (id: number, isoDate: string) => {
+    setTransactions(prev => prev.map((t: Transaction) => t.id === id ? { ...t, date: isoDate } : t));
+  };
+
+  // Shift all transaction dates by given days (positive or negative)
+  const shiftAllDatesBy = (days: number) => {
+    setTransactions(prev => prev.map((t: Transaction) => {
+      const d = new Date(t.date || new Date().toISOString());
+      d.setDate(d.getDate() + days);
+      return { ...t, date: d.toISOString() };
+    }));
+  };
 
   if (!mounted) return null;
 
@@ -117,6 +139,30 @@ export default function HUD() {
             <button key={amt} className="bg-white border-2 border-black p-2 font-black">
               {amt}
             </button>
+          ))}
+        </div>
+      </section>
+
+      {/* HISTORY - per-log date editing + bulk shift */}
+      <section className="mt-8 p-6 border-2 border-black bg-white">
+        <h2 className="text-[10px] font-black uppercase mb-4">History</h2>
+
+        <div className="flex items-center gap-2 mb-4">
+          <input type="number" className="w-24 p-2 border-2 border-black text-xs" value={shiftDays} onChange={(e) => setShiftDays(Number(e.target.value))} />
+          <button onClick={() => shiftAllDatesBy(shiftDays)} className="bg-black text-white p-2 border-2 border-black font-bold">Shift All Dates</button>
+        </div>
+
+        <div className="space-y-2">
+          {transactions.map((t: Transaction) => (
+            <div key={t.id} className="flex justify-between items-center border-t-2 pt-2">
+              <div>
+                <div className="font-bold text-sm">{t.text}</div>
+                <div className="text-xs">Amount: {t.amount.toLocaleString()} ETB</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <input type="date" className="p-2 border-2 border-black text-xs" value={t.date ? t.date.slice(0,10) : new Date().toISOString().slice(0,10)} onChange={(e) => updateTransactionDate(t.id, new Date(e.target.value).toISOString())} />
+              </div>
+            </div>
           ))}
         </div>
       </section>
