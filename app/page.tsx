@@ -3,7 +3,6 @@ import { useState, useEffect, useMemo } from 'react';
 import { db } from './lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { Trash2, X, Trash, Pencil, Check } from 'lucide-react';
-import { motion } from 'framer-motion';
 import { LineChart, Line, ResponsiveContainer, CartesianGrid, XAxis, YAxis } from 'recharts';
 
 export default function HUD() {
@@ -27,6 +26,10 @@ export default function HUD() {
   const [newRec, setNewRec] = useState({ text: '', amount: '' });
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editData, setEditData] = useState({ text: '', amount: '' });
+  const [cashInPocket] = useState(2500);
+  const [upcomingIncome] = useState([
+    { id: 1, amount: 20000, date: new Date('2026-07-02') }
+  ]);
 
   // Load from Firestore
   useEffect(() => {
@@ -78,26 +81,42 @@ export default function HUD() {
       curr.type === 'income' ? acc + curr.amount : acc - curr.amount, 0),
   })), [transactions]);
 
-  // Survival calculations
-  const averageDailySpend = 200; // TODO: replace with derived value from transactions
-  const dailyBurn = useMemo(() => {
-    const recurringDaily = totalRecurring / 30;
-    return averageDailySpend + recurringDaily;
-  }, [totalRecurring]);
+  // Survival simulator (90-day projection)
+  const survivalStats = useMemo(() => {
+    let balance = currentBalance + cashInPocket;
+    let days = 0;
+    const maxDays = 90;
 
-  const survivalDays = useMemo(() => Math.floor(safeToSpend / dailyBurn), [safeToSpend, dailyBurn]);
+    for (let i = 0; i < maxDays; i++) {
+      const today = new Date();
+      today.setDate(today.getDate() + i);
 
-  const survivalDate = useMemo(() => {
-    const date = new Date();
-    date.setDate(date.getDate() + survivalDays);
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  }, [survivalDays]);
+      // 1. Subtract daily burn (hardcoded conservative value)
+      balance -= 780;
 
-  const getSurvivalStatus = () => {
-    if (survivalDays > 30) return { color: 'bg-green-400', message: 'you’re chilling' };
-    if (survivalDays > 10) return { color: 'bg-yellow-300', message: 'careful…' };
-    return { color: 'bg-red-500', message: 'financial winter approaching' };
-  };
+      // 2. Subtract recurring on the first of the month
+      if (today.getDate() === 1) balance -= totalRecurring;
+
+      // 3. Add upcoming income if it matches today
+      const payday = upcomingIncome.find(p => p.date.toDateString() === today.toDateString());
+      if (payday) balance += payday.amount;
+
+      if (balance <= 0) break;
+      days++;
+    }
+
+    const getStatus = (d: number) => {
+      if (d > 30) return { label: 'YOU’RE CHILLING', color: 'bg-green-400' };
+      if (d > 14) return { label: 'STABLE FOR NOW', color: 'bg-yellow-300' };
+      if (d > 7) return { label: 'CAREFUL...', color: 'bg-orange-400' };
+      if (d > 3) return { label: 'FINANCIAL WINTER', color: 'bg-red-500' };
+      return { label: 'BRO.', color: 'bg-black text-white' };
+    };
+
+    const resultDate = new Date();
+    resultDate.setDate(resultDate.getDate() + days);
+    return { days, status: getStatus(days), date: resultDate };
+  }, [currentBalance, cashInPocket, upcomingIncome, totalRecurring]);
 
   if (!mounted) return null;
 
@@ -190,18 +209,28 @@ export default function HUD() {
           </ResponsiveContainer>
         </div>
         
-        <div className={`border-4 border-black p-8 ${getSurvivalStatus().color} shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] rounded-2xl relative overflow-hidden`}>
-          {survivalDays < 10 && (
-            <motion.div 
-              animate={{ scale: [1, 1.05, 1] }} 
-              transition={{ repeat: Infinity, duration: 1 }}
-              className="absolute inset-0 border-4 border-red-700 pointer-events-none"
-            />
-          )}
-          <h1 className="text-sm font-black">SURVIVAL</h1>
-          <p className="text-5xl font-black mt-2">{survivalDays} DAYS LEFT</p>
-          <p className="text-xl font-bold mt-1">SURVIVE UNTIL {survivalDate.toUpperCase()}</p>
-          <p className="text-xs font-bold mt-4 uppercase tracking-widest">{getSurvivalStatus().message}</p>
+        <div className={`border-4 border-black p-6 ${survivalStats.status.color} shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] rounded-xl`}>
+          <div className="flex justify-between items-start">
+            <h1 className="font-black text-xs uppercase tracking-widest">Survival Meter</h1>
+            <span className="font-black text-xs">{survivalStats.status.label}</span>
+          </div>
+
+          <p className="text-6xl font-black my-4">{survivalStats.days} DAYS LEFT</p>
+
+          <div className="grid grid-cols-2 gap-4 border-t-2 border-black pt-4 font-bold text-xs uppercase">
+            <div>
+              <p className="opacity-70">Until</p>
+              <p>{survivalStats.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</p>
+            </div>
+            <div>
+              <p className="opacity-70">Daily Burn</p>
+              <p>-780 ETB</p>
+            </div>
+          </div>
+
+          <div className="mt-6 p-3 bg-white border-2 border-black font-bold text-xs">
+            NEXT INCOME SAVES RUN: +20,000 ETB IN 5 DAYS
+          </div>
         </div>
       </div>
 
