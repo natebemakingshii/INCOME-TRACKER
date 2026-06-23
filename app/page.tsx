@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { db } from '../lib/firebase';
+import { db } from './lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { Trash2, Plus, X, Trash, Pencil, Check } from 'lucide-react';
 import { LineChart, Line, ResponsiveContainer } from 'recharts';
