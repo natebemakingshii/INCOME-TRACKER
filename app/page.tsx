@@ -55,34 +55,36 @@ export default function HUD() {
 
   if (!mounted) return null;
 
-  const {
-    totalRecurring,
-    totalIncome,
-    totalExpenses,
-    balance,
-    safeToSpend,
-    savingsPercent,
-    chartData,
-  } = useMemo(() => {
-    const totalRecurring = recurring.reduce((acc, r) => acc + r.amount, 0);
+  const totalRecurring = useMemo(() => recurring.reduce((acc, r) => acc + r.amount, 0), [recurring]);
+
+  const totalIncome = useMemo(() => transactions
+    .filter(t => t.type === 'income')
+    .reduce((acc, t) => acc + t.amount, 0), [transactions]);
+
+  const totalExpenses = useMemo(() => transactions
+    .filter(t => t.type === 'expense')
+    .reduce((acc, t) => acc + t.amount, 0), [transactions]);
+
+  const currentBalance = useMemo(() => {
     const totalIncome = transactions
       .filter(t => t.type === 'income')
       .reduce((acc, t) => acc + t.amount, 0);
     const totalExpenses = transactions
       .filter(t => t.type === 'expense')
       .reduce((acc, t) => acc + t.amount, 0);
-    const balance = totalIncome - totalExpenses - savings;
-    const safeToSpend = balance - totalRecurring;
-    const savingsPercent = Math.min(Math.round((goalAmount === 0 ? 0 : (savings / goalAmount) * 100)), 100);
 
-    const chartData = transactions.slice(-5).map((t, i) => ({
-      name: t.text,
-      value: transactions.slice(0, i + 1).reduce((acc, curr) => 
-        curr.type === 'income' ? acc + curr.amount : acc - curr.amount, 0),
-    }));
+    return totalIncome - totalExpenses - savings;
+  }, [transactions, savings]);
 
-    return { totalRecurring, totalIncome, totalExpenses, balance, safeToSpend, savingsPercent, chartData };
-  }, [recurring, transactions, savings, goalAmount]);
+  const safeToSpend = useMemo(() => currentBalance - totalRecurring, [currentBalance, totalRecurring]);
+
+  const savingsPercent = useMemo(() => Math.min(Math.round((goalAmount === 0 ? 0 : (savings / goalAmount) * 100)), 100), [savings, goalAmount]);
+
+  const chartData = useMemo(() => transactions.slice(-5).map((t, i) => ({
+    name: t.text,
+    value: transactions.slice(0, i + 1).reduce((acc, curr) =>
+      curr.type === 'income' ? acc + curr.amount : acc - curr.amount, 0),
+  })), [transactions]);
 
   const addTransaction = () => {
     const amount = Number(formData.amount);
@@ -98,7 +100,7 @@ export default function HUD() {
       <header className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
         <div className="border-4 border-black p-8 bg-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] rounded-2xl">
           <h1 className="text-sm font-bold">RUNWAY BALANCE</h1>
-          <p className="text-6xl font-black mt-2">{balance.toLocaleString()} ETB</p>
+          <p className="text-6xl font-black mt-2">{currentBalance.toLocaleString()} ETB</p>
         </div>
         <div className="border-4 border-black p-8 bg-black text-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] rounded-2xl">
           <h1 className="text-sm font-bold text-neutral-400">SAFE TO SPEND</h1>
