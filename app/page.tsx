@@ -53,8 +53,6 @@ export default function HUD() {
     }
   }, [transactions, savings, recurring, mounted]);
 
-  if (!mounted) return null;
-
   const totalRecurring = useMemo(() => recurring.reduce((acc, r) => acc + r.amount, 0), [recurring]);
 
   const totalIncome = useMemo(() => transactions
@@ -66,15 +64,8 @@ export default function HUD() {
     .reduce((acc, t) => acc + t.amount, 0), [transactions]);
 
   const currentBalance = useMemo(() => {
-    const totalIncome = transactions
-      .filter(t => t.type === 'income')
-      .reduce((acc, t) => acc + t.amount, 0);
-    const totalExpenses = transactions
-      .filter(t => t.type === 'expense')
-      .reduce((acc, t) => acc + t.amount, 0);
-
     return totalIncome - totalExpenses - savings;
-  }, [transactions, savings]);
+  }, [totalIncome, totalExpenses, savings]);
 
   const safeToSpend = useMemo(() => currentBalance - totalRecurring, [currentBalance, totalRecurring]);
 
@@ -85,6 +76,8 @@ export default function HUD() {
     value: transactions.slice(0, i + 1).reduce((acc, curr) =>
       curr.type === 'income' ? acc + curr.amount : acc - curr.amount, 0),
   })), [transactions]);
+
+  if (!mounted) return null;
 
   const addTransaction = () => {
     const amount = Number(formData.amount);
