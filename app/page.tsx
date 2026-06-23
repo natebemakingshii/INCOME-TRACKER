@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { db } from './lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { Trash2, X, Trash, Pencil, Check } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { LineChart, Line, ResponsiveContainer, CartesianGrid, XAxis, YAxis } from 'recharts';
 
 export default function HUD() {
@@ -76,6 +77,27 @@ export default function HUD() {
     value: transactions.slice(0, i + 1).reduce((acc, curr) =>
       curr.type === 'income' ? acc + curr.amount : acc - curr.amount, 0),
   })), [transactions]);
+
+  // Survival calculations
+  const averageDailySpend = 200; // TODO: replace with derived value from transactions
+  const dailyBurn = useMemo(() => {
+    const recurringDaily = totalRecurring / 30;
+    return averageDailySpend + recurringDaily;
+  }, [totalRecurring]);
+
+  const survivalDays = useMemo(() => Math.floor(safeToSpend / dailyBurn), [safeToSpend, dailyBurn]);
+
+  const survivalDate = useMemo(() => {
+    const date = new Date();
+    date.setDate(date.getDate() + survivalDays);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }, [survivalDays]);
+
+  const getSurvivalStatus = () => {
+    if (survivalDays > 30) return { color: 'bg-green-400', message: 'you’re chilling' };
+    if (survivalDays > 10) return { color: 'bg-yellow-300', message: 'careful…' };
+    return { color: 'bg-red-500', message: 'financial winter approaching' };
+  };
 
   if (!mounted) return null;
 
@@ -166,6 +188,20 @@ export default function HUD() {
               <Line type="monotone" dataKey="value" stroke="#000" strokeWidth={3} />
             </LineChart>
           </ResponsiveContainer>
+        </div>
+        
+        <div className={`border-4 border-black p-8 ${getSurvivalStatus().color} shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] rounded-2xl relative overflow-hidden`}>
+          {survivalDays < 10 && (
+            <motion.div 
+              animate={{ scale: [1, 1.05, 1] }} 
+              transition={{ repeat: Infinity, duration: 1 }}
+              className="absolute inset-0 border-4 border-red-700 pointer-events-none"
+            />
+          )}
+          <h1 className="text-sm font-black">SURVIVAL</h1>
+          <p className="text-5xl font-black mt-2">{survivalDays} DAYS LEFT</p>
+          <p className="text-xl font-bold mt-1">SURVIVE UNTIL {survivalDate.toUpperCase()}</p>
+          <p className="text-xs font-bold mt-4 uppercase tracking-widest">{getSurvivalStatus().message}</p>
         </div>
       </div>
 
