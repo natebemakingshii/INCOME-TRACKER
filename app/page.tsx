@@ -1,8 +1,8 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { db } from './lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { Trash2, Plus, X, Trash, Pencil, Check } from 'lucide-react';
+import { Trash2, X, Trash, Pencil, Check } from 'lucide-react';
 import { LineChart, Line, ResponsiveContainer } from 'recharts';
 
 export default function HUD() {
@@ -55,18 +55,34 @@ export default function HUD() {
 
   if (!mounted) return null;
 
-  const totalRecurring = recurring.reduce((acc, r) => acc + r.amount, 0);
-  const totalIncome = transactions.filter(t => t.type === 'income').reduce((acc, t) => acc + t.amount, 0);
-  const totalExpenses = transactions.filter(t => t.type === 'expense').reduce((acc, t) => acc + t.amount, 0);
-  const balance = (totalIncome - totalExpenses - savings);
-  const safeToSpend = balance - totalRecurring;
-  const savingsPercent = Math.min(Math.round((savings / goalAmount) * 100), 100);
+  const {
+    totalRecurring,
+    totalIncome,
+    totalExpenses,
+    balance,
+    safeToSpend,
+    savingsPercent,
+    chartData,
+  } = useMemo(() => {
+    const totalRecurring = recurring.reduce((acc, r) => acc + r.amount, 0);
+    const totalIncome = transactions
+      .filter(t => t.type === 'income')
+      .reduce((acc, t) => acc + t.amount, 0);
+    const totalExpenses = transactions
+      .filter(t => t.type === 'expense')
+      .reduce((acc, t) => acc + t.amount, 0);
+    const balance = totalIncome - totalExpenses - savings;
+    const safeToSpend = balance - totalRecurring;
+    const savingsPercent = Math.min(Math.round((goalAmount === 0 ? 0 : (savings / goalAmount) * 100)), 100);
 
-  const chartData = transactions.slice(-5).map((t, i) => ({
-    name: t.text,
-    value: transactions.slice(0, i + 1).reduce((acc, curr) => 
-      curr.type === 'income' ? acc + curr.amount : acc - curr.amount, 0)
-  }));
+    const chartData = transactions.slice(-5).map((t, i) => ({
+      name: t.text,
+      value: transactions.slice(0, i + 1).reduce((acc, curr) => 
+        curr.type === 'income' ? acc + curr.amount : acc - curr.amount, 0),
+    }));
+
+    return { totalRecurring, totalIncome, totalExpenses, balance, safeToSpend, savingsPercent, chartData };
+  }, [recurring, transactions, savings, goalAmount]);
 
   const addTransaction = () => {
     const amount = Number(formData.amount);
@@ -183,7 +199,7 @@ export default function HUD() {
             <div className="flex justify-between mb-6 font-black"><h2>NEW ENTRY</h2><button onClick={() => setIsModalOpen(false)}><X /></button></div>
             <input className="w-full p-3 border-2 border-black mb-4" placeholder="Desc" onChange={(e) => setFormData({...formData, text: e.target.value})} />
             <input className="w-full p-3 border-2 border-black mb-4" placeholder="Amount" type="number" onChange={(e) => setFormData({...formData, amount: e.target.value})} />
-            <select className="w-full p-3 border-2 border-black mb-6" onChange={(e) => setFormData({...formData, type: e.target.value as any})}>
+            <select className="w-full p-3 border-2 border-black mb-6" onChange={(e) => setFormData({...formData, type: e.target.value as 'income' | 'expense' | 'savings'})}>
               <option value="income">Income</option><option value="expense">Expense</option><option value="savings">Savings</option>
             </select>
             <button onClick={addTransaction} className="w-full bg-black text-white p-4 font-bold">SAVE</button>
