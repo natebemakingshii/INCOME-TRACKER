@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { db } from './lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 // Note: icons and charting removed for simplified HUD
@@ -9,6 +9,7 @@ type Transaction = { id: number; text: string; amount: number; type: 'income' | 
 export default function HUD() {
   const [mounted, setMounted] = useState(false);
   const [transactions, setTransactions] = useState<Transaction[]>([{ id: 1, text: 'Freelance', amount: 5000, type: 'income', date: new Date().toISOString() }]);
+  const idRef = useRef(2);
   const [savings, setSavings] = useState(0);
   const [recurring, setRecurring] = useState([
     { id: 1, text: 'RENT', amount: 14000 },
@@ -99,6 +100,12 @@ export default function HUD() {
     }));
   };
 
+  // Handle impulse purchases quickly by adding an expense transaction
+  const handleImpulse = (amount: number) => {
+    const newExpense: Transaction = { id: idRef.current++, text: 'Impulse', amount: Math.abs(amount), type: 'expense', date: new Date().toISOString() };
+    setTransactions(prev => [...prev, newExpense]);
+  };
+
   if (!mounted) return null;
 
   return (
@@ -132,11 +139,15 @@ export default function HUD() {
       </section>
 
       {/* 3. DECISION ENGINE */}
-      <section className="p-6 border-4 border-black bg-yellow-400 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+      <section className="p-6 border-4 border-black bg-yellow-400 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
         <h2 className="text-[10px] font-black uppercase mb-4">Impulse Check</h2>
-        <div className="flex gap-2">
-          {[-100, -500, -1000].map(amt => (
-            <button key={amt} className="bg-white border-2 border-black p-2 font-black">
+        <div className="flex gap-4 border-4 border-black p-6 bg-yellow-400 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+          {[-100, -500, -1000].map((amt) => (
+            <button 
+              key={amt} 
+              onClick={() => handleImpulse(amt)}
+              className="bg-white border-4 border-black px-6 py-2 font-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all"
+            >
               {amt}
             </button>
           ))}
