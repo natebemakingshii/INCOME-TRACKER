@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { db } from './lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { Trash2, X, Trash, Pencil, Check } from 'lucide-react';
-import { LineChart, Line, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, ResponsiveContainer, CartesianGrid, XAxis, YAxis } from 'recharts';
 
 export default function HUD() {
   const [mounted, setMounted] = useState(false);
@@ -158,7 +158,14 @@ export default function HUD() {
 
         <div className="border-4 border-black p-6 bg-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] rounded-2xl">
           <h2 className="font-bold mb-4">MOMENTUM</h2>
-          <ResponsiveContainer width="100%" height={100}><LineChart data={chartData}><Line type="monotone" dataKey="value" stroke="#000" strokeWidth={3} /></LineChart></ResponsiveContainer>
+          <ResponsiveContainer width="100%" height={100}>
+            <LineChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="name" />
+              <YAxis />
+              <Line type="monotone" dataKey="value" stroke="#000" strokeWidth={3} />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
       </div>
 
