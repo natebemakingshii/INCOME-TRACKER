@@ -5,9 +5,11 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { Trash2, X, Trash, Pencil, Check } from 'lucide-react';
 import { LineChart, Line, ResponsiveContainer, CartesianGrid, XAxis, YAxis } from 'recharts';
 
+type Transaction = { id: number; text: string; amount: number; type: 'income' | 'expense' | 'savings'; date: string };
+
 export default function HUD() {
   const [mounted, setMounted] = useState(false);
-  const [transactions, setTransactions] = useState([{ id: 1, text: 'Freelance', amount: 5000, type: 'income' }]);
+  const [transactions, setTransactions] = useState<Transaction[]>([{ id: 1, text: 'Freelance', amount: 5000, type: 'income', date: new Date().toISOString() }]);
   const [savings, setSavings] = useState(0);
   const [recurring, setRecurring] = useState([
     { id: 1, text: 'RENT', amount: 14000 },
@@ -25,7 +27,7 @@ export default function HUD() {
   const [formData, setFormData] = useState({ text: '', amount: '', type: 'income' as 'income' | 'expense' | 'savings' });
   const [newRec, setNewRec] = useState({ text: '', amount: '' });
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [editData, setEditData] = useState({ text: '', amount: '' });
+  const [editData, setEditData] = useState({ text: '', amount: '', date: new Date().toISOString() });
 
   // Load from Firestore
   useEffect(() => {
@@ -34,7 +36,14 @@ export default function HUD() {
       const docSnap = await getDoc(docRef);
       if (docSnap.exists()) {
         const data = docSnap.data();
-        setTransactions(data.transactions);
+        const tx = (data.transactions || []).map((item: unknown) => {
+          const transaction = item as Partial<Transaction>;
+          return {
+            ...(transaction as Transaction),
+            date: transaction?.date ? new Date(transaction.date as string).toISOString() : new Date().toISOString(),
+          } as Transaction;
+        });
+        setTransactions(tx);
         setSavings(data.savings);
         setRecurring(data.recurring);
       }
@@ -63,11 +72,17 @@ export default function HUD() {
     .filter(t => t.type === 'expense')
     .reduce((acc, t) => acc + t.amount, 0), [transactions]);
 
+  const incomeTransactions = useMemo(() => transactions.filter(t => t.type === 'income'), [transactions]);
+
   const currentBalance = useMemo(() => {
     return totalIncome - totalExpenses - savings;
   }, [totalIncome, totalExpenses, savings]);
 
   const safeToSpend = useMemo(() => currentBalance - totalRecurring, [currentBalance, totalRecurring]);
+
+  const updateTransactionDate = (id: number, date: string) => {
+    setTransactions(prev => prev.map(t => t.id === id ? { ...t, date } : t));
+  };
 
   const savingsPercent = useMemo(() => Math.min(Math.round((goalAmount === 0 ? 0 : (savings / goalAmount) * 100)), 100), [savings, goalAmount]);
 
@@ -82,8 +97,11 @@ export default function HUD() {
   const addTransaction = () => {
     const amount = Number(formData.amount);
     if (!amount) return;
-    if (formData.type === 'savings') { setSavings(prev => prev + amount); } 
-    else { setTransactions([...transactions, { id: Date.now(), text: formData.text || 'Entry', amount, type: formData.type }]); }
+    if (formData.type === 'savings') {
+      setSavings(prev => prev + amount);
+    } else {
+      setTransactions([...transactions, { id: Date.now(), text: formData.text || 'Entry', amount, type: formData.type, date: new Date().toISOString() }]);
+    }
     setIsModalOpen(false);
     setFormData({ text: '', amount: '', type: 'income' });
   };
@@ -169,28 +187,81 @@ export default function HUD() {
         </div>
       </div>
 
-      <section className="border-4 border-black bg-white p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] rounded-2xl mb-8">
-        <h2 className="text-2xl font-black mb-6">HISTORY</h2>
-        {transactions.map(t => (
-          <div key={t.id} className="flex justify-between items-center border-2 border-black p-4 mb-2 rounded-xl">
-            {editingId === t.id ? (
-              <div className="flex gap-2 w-full">
-                <input className="border-2 border-black p-1 text-xs w-1/2" defaultValue={t.text} onChange={(e) => setEditData({...editData, text: e.target.value})} />
-                <input className="border-2 border-black p-1 text-xs w-1/4" defaultValue={t.amount} onChange={(e) => setEditData({...editData, amount: e.target.value})} />
-                <button onClick={() => { setTransactions(transactions.map(tr => tr.id === t.id ? { ...tr, text: editData.text, amount: Number(editData.amount) } : tr)); setEditingId(null); }}><Check size={16}/></button>
+      <section className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+        <div className="border-4 border-black p-8 bg-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] rounded-2xl">
+          <h2 className="text-xs font-black uppercase tracking-widest mb-4">When you get paid</h2>
+          <div className="space-y-4">
+            {incomeTransactions.map((income) => (
+              <div key={income.id} className="border-2 border-black p-4 rounded-2xl flex flex-col gap-3">
+                <div className="flex justify-between items-start gap-4">
+                  <div>
+                    <p className="font-black text-sm uppercase">{income.text}</p>
+                    {editingId === income.id ? (
+                      <input
+                        type="date"
+                        className="mt-2 border-2 border-black p-2 text-xs"
+                        value={editData.date.slice(0, 10)}
+                        onChange={(e) => setEditData({ ...editData, date: new Date(e.target.value).toISOString() })}
+                      />
+                    ) : (
+                      <p className="text-xs opacity-70 mt-2">{new Date(income.date).toLocaleDateString()}</p>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    <p className="font-black">+{income.amount.toLocaleString()} ETB</p>
+                  </div>
+                </div>
+                {editingId === income.id ? (
+                  <div className="flex gap-2 flex-wrap">
+                    <button
+                      onClick={() => {
+                        updateTransactionDate(income.id, editData.date);
+                        setEditingId(null);
+                      }}
+                      className="bg-black text-white px-4 py-2 border-4 border-black font-black rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
+                    >
+                      Save date
+                    </button>
+                    <button
+                      onClick={() => setEditingId(null)}
+                      className="bg-white text-black px-4 py-2 border-4 border-black font-black rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setEditingId(income.id);
+                      setEditData({ text: income.text, amount: income.amount.toString(), date: income.date });
+                    }}
+                    className="self-start bg-black text-white px-4 py-2 border-4 border-black font-black rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
+                  >
+                    Edit pay date
+                  </button>
+                )}
               </div>
-            ) : (
-              <>
-                <span className="font-bold">{t.text}</span>
-                <div className="flex gap-4 items-center">
-                  <span className="font-bold">{t.type === 'income' ? '+' : '-'}{t.amount}</span>
-                  <button onClick={() => {setEditingId(t.id); setEditData({text: t.text, amount: t.amount.toString()})}}><Pencil size={16}/></button>
+            ))}
+          </div>
+        </div>
+        <div className="border-4 border-black p-8 bg-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] rounded-2xl">
+          <h2 className="font-bold mb-6">HISTORY</h2>
+          <div className="space-y-3">
+            {transactions.map(t => (
+              <div key={t.id} className="flex justify-between items-center border-2 border-black p-4 rounded-xl">
+                <div className="space-y-1">
+                  <p className="font-bold">{t.text}</p>
+                  <p className="text-[10px] opacity-70">{t.type.toUpperCase()} • {new Date(t.date).toLocaleDateString()}</p>
+                </div>
+                <div className="flex gap-3 items-center">
+                  <span className="font-black">{t.type === 'income' ? '+' : '-'}{t.amount}</span>
+                  <button onClick={() => {setEditingId(t.id); setEditData({text: t.text, amount: t.amount.toString(), date: t.date })}}><Pencil size={16}/></button>
                   <button onClick={() => setTransactions(transactions.filter(x => x.id !== t.id))}><Trash2 size={16}/></button>
                 </div>
-              </>
-            )}
+              </div>
+            ))}
           </div>
-        ))}
+        </div>
       </section>
 
       <button onClick={() => setIsModalOpen(true)} className="fixed bottom-10 left-10 bg-black text-white p-4 font-black text-xl rounded-full w-14 h-14 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:scale-105 transition-transform">N</button>
